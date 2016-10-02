@@ -17,6 +17,7 @@ package com.mbrlabs.mundus.ui.modules;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
@@ -56,7 +57,7 @@ import com.mbrlabs.mundus.utils.TerrainUtils;
  * Outline shows overview about all game objects in the scene
  *
  * @author Marcus Brummer, codenigma
- * @version 27-09-2016
+ * @version 01-10-2016
  */
 public class Outline extends VisTable implements
         ProjectChangedEvent.ProjectChangedListener,
@@ -121,7 +122,7 @@ public class Outline extends VisTable implements
     public void onProjectChanged(ProjectChangedEvent projectChangedEvent) {
         //update to new sceneGraph
         sceneGraph = projectManager.current().currScene.sceneGraph;
-        Log.traceTag(TAG, "Project changed. Building scene graph.");
+        Log.trace(TAG, "Project changed. Building scene graph.");
         buildTree(sceneGraph);
     }
 
@@ -129,13 +130,13 @@ public class Outline extends VisTable implements
     public void onSceneChanged(SceneChangedEvent sceneChangedEvent) {
         //update to new sceneGraph
         sceneGraph = projectManager.current().currScene.sceneGraph;
-        Log.traceTag(TAG, "Scene changed. Building scene graph.");
+        Log.trace(TAG, "Scene changed. Building scene graph.");
         buildTree(sceneGraph);
     }
 
     @Override
     public void onSceneGraphChanged(SceneGraphChangedEvent sceneGraphChangedEvent) {
-        Log.traceTag(TAG, "SceneGraph changed. Building scene graph.");
+        Log.trace(TAG, "SceneGraph changed. Building scene graph.");
         buildTree(sceneGraph);
     }
 
@@ -175,9 +176,7 @@ public class Outline extends VisTable implements
             @Override
             public void drop(DragAndDrop.Source source, DragAndDrop.Payload payload, float x, float y, int pointer) {
                 Tree.Node node = (Tree.Node) payload.getObject();
-
-                final ProjectContext projectContext = projectManager.current();
-
+                
                 if (node != null) {
                     GameObject draggedGo = (GameObject) node.getObject();
                     Tree.Node newParent = tree.getNodeAt(y);
@@ -189,16 +188,51 @@ public class Outline extends VisTable implements
                             return;
                         }
                     }
-
+                    GameObject oldParent = draggedGo.getParent();
+                    
                     // remove child from old parent
                     draggedGo.remove();
 
                     // add to new parent
                     if (newParent == null) {
+                        // recalculate position for root layer
+                        Vector3 newPos;
+                        Vector3 draggedPos = new Vector3();
+                        draggedGo.getPosition(draggedPos);
+                        //if moved from old parent
+                        if(oldParent != null) {
+                            // new position = oldParentPos + draggedPos
+                            Vector3 parentPos = new Vector3();
+                            oldParent.getPosition(parentPos);
+                            newPos = parentPos.add(draggedPos);
+                        } else {
+                            // new local position = World position
+                            newPos = draggedPos;
+                        }
                         projectContext.currScene.sceneGraph.addGameObject(draggedGo);
+                        draggedGo.setLocalPosition(newPos.x,newPos.y,newPos.z);
                     } else {
                         GameObject parentGo = (GameObject) newParent.getObject();
+                        // recalculate position
+                        Vector3 parentPos = new Vector3();
+                        Vector3 draggedPos = new Vector3();
+                        // World coorinates
+                        draggedGo.getPosition(draggedPos);
+                        parentGo.getPosition(parentPos);
+                        
+                        // if gameObject came from old parent
+                        if(oldParent != null) {
+                            // calculate oldParentPos + draggedPos
+                            Vector3 oldParentPos = new Vector3();
+                            oldParent.getPosition(oldParentPos);
+                            draggedPos = oldParentPos.add(draggedPos);
+                        }
+                        
+                        // Local in releation to new parent
+                        Vector3 newPos = draggedPos.sub(parentPos);
+                        // add
                         parentGo.addChild(draggedGo);
+                        draggedGo.setLocalPosition(newPos.x,newPos.y,newPos.z);
                     }
 
                     // update tree
@@ -206,7 +240,6 @@ public class Outline extends VisTable implements
                 }
             }
         });
-
     }
 
     private void setupListeners() {
@@ -317,7 +350,7 @@ public class Outline extends VisTable implements
      * @param parent    game object on which clone will be added
      */
     private void duplicateGO(GameObject go, GameObject parent) {
-        Log.traceTag(TAG, "Duplicate [{}] with parent [{}]", go, parent);
+        Log.trace(TAG, "Duplicate [{}] with parent [{}]", go, parent);
         GameObject goCopy = new GameObject(go, projectContext.obtainID());
 
         // add copy to tree
@@ -338,7 +371,7 @@ public class Outline extends VisTable implements
     @Override
     public void onGameObjectSelected(GameObjectSelectedEvent gameObjectSelectedEvent) {
         Tree.Node node = tree.findNode(gameObjectSelectedEvent.getGameObject());
-        Log.traceTag(TAG, "Select game object [{}].", node.getObject());
+        Log.trace(TAG, "Select game object [{}].", node.getObject());
         tree.getSelection().clear();
         tree.getSelection().add(node);
         node.expandTo();
@@ -391,12 +424,12 @@ public class Outline extends VisTable implements
                     //update outline
                     if (selectedGO == null) {
                         //update sceneGraph
-                        Log.traceTag(TAG, "Add empty game object [{}] in root node.", go);
+                        Log.trace(TAG, "Add empty game object [{}] in root node.", go);
                         sceneGraph.addGameObject(go);
                         //update outline
                         addGoToTree(null, go);
                     } else {
-                        Log.traceTag(TAG, "Add empty game object [{}] child in node [{}].", go, selectedGO);
+                        Log.trace(TAG, "Add empty game object [{}] child in node [{}].", go, selectedGO);
                         //update sceneGraph
                         selectedGO.addChild(go);
                         //update outline
@@ -412,7 +445,7 @@ public class Outline extends VisTable implements
                 @Override
                 public void clicked(InputEvent event, float x, float y) {
                     //To-DO: Terrain config popup: set width and height values, maybe heightmap import options
-                    Log.traceTag(TAG, "Add terrain game object in root node.");
+                    Log.trace(TAG, "Add terrain game object in root node.");
                     Terrain terrain = TerrainUtils.createTerrain(projectContext.obtainID(), "Terrain", 1200, 1200, 180);
                     projectContext.terrains.add(terrain);
                     //projectContext.currScene.terrainGroup.add(terrain);
@@ -503,7 +536,7 @@ public class Outline extends VisTable implements
             InputDialog renameDialog = Dialogs.showInputDialog(Ui.getInstance(), "Rename", "", new InputDialogAdapter() {
                 @Override
                 public void finished(String input) {
-                    Log.traceTag(TAG, "Rename game object [{}] to [{}].", selectedGO, input);
+                    Log.trace(TAG, "Rename game object [{}] to [{}].", selectedGO, input);
                     // update sceneGraph
                     selectedGO.name = input;
                     // update Outline
